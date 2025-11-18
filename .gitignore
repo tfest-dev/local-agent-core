@@ -1,0 +1,16 @@
+# OS-level
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+.env
+*.venv/
+.venv/
+venv/
+
+# IDE & editor junk
+.idea/
+*.swp
+*.swo
