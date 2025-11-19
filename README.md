@@ -39,6 +39,6 @@ Built-in formats:
 - Step-by-step expansion with tested milestones
 
 Next planned modules:
-- simple CLI entrypoint
 - agent loop and tool hooks
 - optional TTS integration
+- browser interaction window
