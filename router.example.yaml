@@ -1,0 +1,36 @@
+# router.example.yaml
+#
+# Example routing configuration for local-agent-core.
+# Copy this file to router.yaml and adjust the URLs / models
+# to match your own local or remote LLM setup.
+
+defaults:
+  model: general
+  speaker: default
+  stream: false
+  system_prompt: >
+    You are a helpful AI assistant. Use clear, structured responses
+    and explain your reasoning when useful.
+
+aliases:
+  general:
+    model: general
+    stream: false
+    format: llama-chat
+    system_prompt: >
+      You are a general-purpose assistant. Provide clear, concise,
+      and well-structured answers.
+
+  code-python:
+    model: code
+    stream: false
+    format: code
+    system_prompt: >
+      You are a helpful coding assistant focused on Python. Provide
+      working examples and explain key steps briefly.
+
+models:
+  general:
+    url: http://127.0.0.1:30100
+  code:
+    url: http://127.0.0.1:30200
