@@ -3,6 +3,12 @@
 # Example routing configuration for local-agent-core.
 # Copy this file to router.yaml and adjust the URLs / models
 # to match your own local or remote LLM setup.
+#
+# model = general / code / reasoning
+# speaker = specific voice modulation
+# stream = chunk and async stream the responses
+# format = aligned to the FORMAT_BUILDERS under builder.py
+# system_prompt =
 
 defaults:
   model: general
@@ -24,13 +30,23 @@ aliases:
   code-python:
     model: code
     stream: false
-    format: code
+    format: codellama
     system_prompt: >
       You are a helpful coding assistant focused on Python. Provide
       working examples and explain key steps briefly.
+
+  phi4-general:
+    model: phi4
+    stream: false
+    format: phi4
+    system_prompt: >
+      You are a helpful assistant with access to tools. Decide
+      when tools are needed and call them appropriately.
 
 models:
   general:
     url: http://127.0.0.1:30100
   code:
     url: http://127.0.0.1:30200
+  phi4:
+    url: http://127.0.0.1:30300
