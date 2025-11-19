@@ -1,5 +1,10 @@
 # local-agent-core
 
+![Local Agent Core UI](docs/images/flask-webui-basic.png)
+
+*A minimal web UI included with the project. Branding, colours and layout are intended to be customised per client.*
+
+
 A lightweight, privacy-focused framework for building small AI agents that run entirely on your own hardware.
 This project is designed to be modular, simple to extend, and suitable for self-hosted or offline environments.
 
@@ -37,6 +42,13 @@ By default, this just logs the text that would be spoken. In a real deployment,
 this function can be swapped or extended to use a concrete TTS engine
 (e.g. edge-tts, ElevenLabs, local speech synthesis).
 
+### Web UI (Optional)
+A minimal Flask-based web interface for interacting with the agent:
+
+- Chat-style interface
+- Route alias selection
+- Clear branding placeholders so client-specific themes can be applied
+
 ---
 
 ## Goals of the Project
@@ -50,7 +62,6 @@ this function can be swapped or extended to use a concrete TTS engine
 
 ## Next Planned Modules
 - **Agent loop** + simple tool/action hooks
-- **Browser-based UI window** (lightweight, drop-in front-end)
 - **Local memory integration** (YAML/JSON or SQLite)
 - **Optional background task runner** for scheduled or long-running actions
 
