@@ -16,9 +16,9 @@ Supports:
 ### Routing Layer
 Config-driven routing via `router.yaml` / `router.example.yaml`:
 
-- Map human-friendly aliases (e.g. `general`, `code-python`) to models
-- Resolve the correct base URL and `/completion` endpoint
-- Carry defaults like `speaker`, `stream`, and `system_prompt`
+- map human-friendly aliases (e.g. `general`, `code-python`) to models
+- resolve the correct base URL and `/completion` endpoint
+- carry defaults like `speaker`, `stream`, and `system_prompt`
 
 ### Prompt Builder
 Model-aware prompt construction based on alias configuration.
@@ -30,15 +30,32 @@ Built-in formats:
 - `phi4` – `<|system|>/<|user|>/<|assistant|>` format
 - `plain` – simple system + user concatenation
 
-## Goals of the Project
+### TTS Hook (Optional)
+A simple text-to-speech hook is provided via `tts.speak_text`.
 
+By default, this just logs the text that would be spoken. In a real deployment,
+this function can be swapped or extended to use a concrete TTS engine
+(e.g. edge-tts, ElevenLabs, local speech synthesis).
+
+---
+
+## Goals of the Project
 - Local-first, privacy-first design
-- Minimal dependencies
-- Modular architecture (LLM, routing, prompts, tools)
+- Minimal and transparent dependencies
+- Modular architecture (LLM runner, routing, prompts, tools, TTS)
 - Clear, maintainable code
 - Step-by-step expansion with tested milestones
 
-Next planned modules:
-- agent loop and tool hooks
-- optional TTS integration
-- browser interaction window
+---
+
+## Next Planned Modules
+- **Agent loop** + simple tool/action hooks
+- **Browser-based UI window** (lightweight, drop-in front-end)
+- **Local memory integration** (YAML/JSON or SQLite)
+- **Optional background task runner** for scheduled or long-running actions
+
+---
+
+## Status
+All existing modules are fully functional and tested independently.
+Each commit represents a clean, working milestone that can be extended safely.

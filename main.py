@@ -7,6 +7,7 @@ from requests.exceptions import RequestException
 
 from inference import LLMRunner, route
 from prompts import build_prompt
+from tts import speak_text
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,6 +25,12 @@ def parse_args() -> argparse.Namespace:
         "-t",
         required=True,
         help="User input text to send to the model.",
+    )
+    parser.add_argument(
+        "--speak",
+        "-s",
+        action="store_true",
+        help="Also send the model output to the TTS hook.",
     )
     return parser.parse_args()
 
@@ -54,8 +61,18 @@ def main() -> None:
         sys.exit(1)
 
     print("\n[✓] LLM output:\n")
-    print(result)
+    if result.strip():
+        print(result)
+    else:
+        print("[!] Model returned empty response.")
     print()
+
+    if args.speak:
+        if result.strip():
+            print("[~] Sending output to TTS…")
+            speak_text(result)
+        else:
+            print("[~] Skipping TTS (no content returned).")
 
 
 if __name__ == "__main__":
