@@ -20,7 +20,8 @@ load_env()
 app = Flask(__name__)
 
 # Default alias for routing
-DEFAULT_ALIAS = "general"
+# Use the GPT-OSS route by default for the web UI.
+DEFAULT_ALIAS = "gpt-oss"
 
 # Shared agent instance for all web requests. The memory store is configured
 # from the environment; it will only be used for aliases that opt-in via
@@ -248,9 +249,16 @@ HTML_PAGE = """
           <div class="settings-row">
             <span>Route alias</span>
             <select id="aliasSelect">
-              <option value="general">general</option>
-              <option value="gpt-oss">gpt-oss</option>
+              <option value="gpt-oss" selected>gpt-oss</option>
+              <option value="general">llama</option>
               <option value="code-python">code-python</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <span>Memory profile</span>
+            <select id="profileSelect">
+              <option value="professional" selected>Professional</option>
+              <option value="social">Social</option>
             </select>
           </div>
           <div class="settings-row">
@@ -280,6 +288,7 @@ HTML_PAGE = """
     const sendBtn = document.getElementById("sendBtn");
     const chatBox = document.getElementById("chat");
     const aliasSelect = document.getElementById("aliasSelect");
+    const profileSelect = document.getElementById("profileSelect");
     const statusText = document.getElementById("statusText");
 
     const text = inputField.value.trim();
@@ -298,12 +307,17 @@ HTML_PAGE = """
     statusText.textContent = "Sending request to local agent…";
 
     try {
+      let alias = aliasSelect.value;
+      if (alias === "gpt-oss" && profileSelect && profileSelect.value === "social") {
+        alias = "gpt-oss-social";
+      }
+
       const resp = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           input: text,
-          alias: aliasSelect.value
+          alias: alias
         }),
       });
 

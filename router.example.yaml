@@ -21,6 +21,10 @@ defaults:
   # configured). Set `memory_enabled` to true per-alias to opt in.
   memory_enabled: false
   memory_top_k: 5
+  # Optional logical memory domain for this configuration. This is used to
+  # tag OpenMemory entries as e.g. "professional" vs "social" without
+  # requiring separate backends.
+  memory_domain: professional
 
 aliases:
   general:
@@ -32,6 +36,26 @@ aliases:
       and well-structured answers.
     # Set to true to enable OpenMemory-backed recall for this alias.
     memory_enabled: true
+
+  gpt-oss:
+    model: general
+    stream: false
+    format: gpt-oss-harmony
+    system_prompt: >
+      You are a home assistant using the GPT‑OSS model. Follow the developer
+      instructions provided and be concise.
+    memory_enabled: true
+    memory_domain: professional
+
+  gpt-oss-social:
+    model: general
+    stream: false
+    format: gpt-oss-harmony
+    system_prompt: >
+      You are a more social, personal companion. Maintain a warm, friendly tone
+      while still being helpful and concise.
+    memory_enabled: true
+    memory_domain: social
 
   code-python:
     model: code

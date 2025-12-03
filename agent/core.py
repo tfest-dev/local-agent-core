@@ -1,6 +1,7 @@
 # agent/core.py
 
-from typing import Optional, List
+from collections import deque
+from typing import Deque, Dict, Optional, List, Tuple
 
 from inference import LLMRunner, route, get_router_alias_config
 from prompts import build_prompt
@@ -22,6 +23,8 @@ class Agent:
         memory_store: Optional[MemoryStore] = None,
         memory_top_k_default: int = 5,
         user_id: Optional[str] = None,
+        memory_domain: str = "professional",
+        recent_history_window: int = 5,
     ) -> None:
         self.default_alias = default_alias
         self.debug = debug
@@ -29,8 +32,16 @@ class Agent:
         self.memory_top_k_default = memory_top_k_default
         # Optional logical user identifier for OpenMemory / other backends.
         self.user_id = user_id
+        # Logical memory domain for this agent instance (e.g. "professional"
+        # vs "social"). This is used purely for tagging / routing in memory
+        # backends and does not affect core inference.
+        self.memory_domain = memory_domain
+        # Per-(user, alias) window of recent user inputs, used for lightweight
+        # continuity / branching heuristics and tagging.
+        self._recent_history_window = max(1, recent_history_window)
+        self._recent_user_inputs: Dict[Tuple[str, str], Deque[str]] = {}
 
-    def respond(self, user_input: str, alias: Optional[str] = None) -> str:
+    def respond(self, user_input: str, alias: Optional[str] = None, *, channel: str = "interactive") -> str:
         """Run a single turn through the agent and return the model response.
 
         This method intentionally stays close to the existing behaviour of the
@@ -49,6 +60,26 @@ class Agent:
         cfg = get_router_alias_config(alias_name)
         memory_enabled = bool(cfg.get("memory_enabled", False))
         memory_top_k = int(cfg.get("memory_top_k", self.memory_top_k_default))
+        memory_domain_cfg = cfg.get("memory_domain")
+        effective_domain = str(memory_domain_cfg or self.memory_domain)
+
+        # Lightweight continuity tagging: track the last few user inputs per
+        # (user_id, alias) key so we can distinguish new queries from
+        # continuations of an in-progress thread. For now we record this in
+        # metadata rather than altering routing logic.
+        user_key = self.user_id or "default"
+        history_key = (user_key, alias_name)
+        history = self._recent_user_inputs.get(history_key)
+        if history is None:
+            history = deque(maxlen=self._recent_history_window)
+            self._recent_user_inputs[history_key] = history
+
+        session_kind = "automation" if channel != "interactive" else (
+            "continuation" if history else "new"
+        )
+
+        # Record this input for future turns.
+        history.append(text)
 
         memory_context: Optional[str] = None
         if memory_enabled and self.memory_store is not None:
@@ -86,11 +117,21 @@ class Agent:
 
         if memory_enabled and self.memory_store is not None:
             try:
+                extra_metadata = {
+                    "memory_domain": effective_domain,
+                    "channel": channel,
+                    "session_kind": session_kind,
+                    # Give OpenMemory some lightweight short-term context so
+                    # downstream analysis can distinguish branches vs
+                    # continuations without needing a separate store.
+                    "recent_user_inputs": list(history),
+                }
                 self.memory_store.add_interaction(
                     user_text=text,
                     assistant_text=result,
                     user_id=self.user_id,
                     alias=alias_name,
+                    extra_metadata=extra_metadata,
                 )
             except Exception as e:  # pragma: no cover - defensive
                 if self.debug:
@@ -107,7 +148,25 @@ class Agent:
         for i, item in enumerate(items, start=1):
             prefix = f"[{i}]"
             score_str = f" (score={item.score:.3f})" if isinstance(item.score, (int, float)) else ""
-            lines.append(f"{prefix}{score_str} {item.content}")
+
+            # Surface key metadata tags inline so the model can distinguish
+            # between different memory domains / channels without needing
+            # separate stores.
+            domain = item.metadata.get("memory_domain") if isinstance(item.metadata, dict) else None
+            channel = item.metadata.get("channel") if isinstance(item.metadata, dict) else None
+            session_kind = item.metadata.get("session_kind") if isinstance(item.metadata, dict) else None
+
+            tags = []
+            if domain:
+                tags.append(str(domain))
+            if channel:
+                tags.append(str(channel))
+            if session_kind:
+                tags.append(str(session_kind))
+
+            tag_str = f" [{' | '.join(tags)}]" if tags else ""
+
+            lines.append(f"{prefix}{score_str}{tag_str} {item.content}")
         return "\n".join(lines)
 
     def _extract_gpt_oss_final(self, raw: str) -> Optional[str]:

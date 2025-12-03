@@ -7,8 +7,8 @@ from requests.exceptions import RequestException
 
 from env_loader import load_env
 from agent import Agent
+from memory import OpenMemoryStore
 from tts import speak_text
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

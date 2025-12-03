@@ -72,6 +72,26 @@ class OpenMemoryStore(MemoryStore):
         if metadata:
             payload["metadata"] = metadata
 
+        # Also project key metadata fields into the top-level `tags` array so
+        # that they are immediately visible in the OpenMemory dashboard UI
+        # without requiring custom views. This does not affect retrieval
+        # semantics but makes domains/channels/session_kind easier to inspect.
+        tags: List[str] = []
+        domain = metadata.get("memory_domain")
+        if domain:
+            tags.append(str(domain))
+        channel = metadata.get("channel")
+        if channel:
+            tags.append(str(channel))
+        session_kind = metadata.get("session_kind")
+        if session_kind:
+            tags.append(str(session_kind))
+        alias_tag = metadata.get("alias")
+        if alias_tag:
+            tags.append(str(alias_tag))
+        if tags:
+            payload["tags"] = tags
+
         self._post("/memory/add", json=payload)
 
     def search(
