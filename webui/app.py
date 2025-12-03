@@ -7,11 +7,15 @@ from pathlib import Path
 from flask import Flask, request, jsonify, render_template_string
 from requests.exceptions import RequestException
 
+from env_loader import load_env
 from agent import Agent
 from memory import OpenMemoryStore
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Load environment variables from a local .env file if present.
+load_env()
 
 app = Flask(__name__)
 
@@ -386,10 +390,10 @@ def main():
     """Start the Flask web UI.
 
     Host and port can be configured via environment variables:
-    - LAC_WEB_HOST (default: ******* )
+    - LAC_WEB_HOST (default: 0.0.0.0)
     - LAC_WEB_PORT (default: 5001)
     """
-    host = os.getenv("LAC_WEB_HOST", "*******")
+    host = os.getenv("LAC_WEB_HOST", "0.0.0.0")
     port = int(os.getenv("LAC_WEB_PORT", "5001"))
     app.run(host=host, port=port, debug=False)
 

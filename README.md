@@ -14,7 +14,7 @@ This project is designed to be modular, simple to extend, and suitable for self-
 
 Runtime configuration is provided via environment variables (optionally loaded from a `.env` file using shell tooling):
 
-- `LAC_WEB_HOST` – bind address for the Flask web UI (default: `*******`).
+- `LAC_WEB_HOST` – bind address for the Flask web UI (default: `0.0.0.0`).
 - `LAC_WEB_PORT` – port for the web UI (default: `5001`).
 - `OPENMEMORY_URL` / `OM_BASE_URL` – base URL for the OpenMemory backend
   (default: `http://localhost:8080`).
@@ -89,9 +89,6 @@ It exposes a HTTP webhook (`/local-agent`) that:
 - CLI and web UI both use a shared `Agent` abstraction.
 - Long-term memory is integrated via OpenMemory and can be enabled per alias.
 - GPT‑OSS / Harmony prompt format is supported via the `gpt-oss-harmony` builder.
-- All existing modules are fully functional and tested independently.
-Each commit represents a clean, working milestone that can be extended safely.
-ed via the `gpt-oss-harmony` builder.
 - All existing modules are fully functional and tested independently.
 Each commit represents a clean, working milestone that can be extended safely.
 

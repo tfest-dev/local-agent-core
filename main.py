@@ -5,8 +5,8 @@ import sys
 
 from requests.exceptions import RequestException
 
+from env_loader import load_env
 from agent import Agent
-from memory import OpenMemoryStore
 from tts import speak_text
 
 
@@ -36,6 +36,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    # Load environment variables from .env if present so things like
+    # OPENMEMORY_URL / OPENMEMORY_API_KEY are available.
+    load_env()
+
     args = parse_args()
 
     if not args.text:
