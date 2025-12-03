@@ -62,7 +62,10 @@ this function can be swapped or extended to use a concrete TTS engine
 A minimal Flask-based web interface for interacting with the agent:
 
 - Chat-style interface
-- Route alias selection (e.g. `general`, `code-python`, `gpt-oss`)
+- Route alias selection (e.g. `gpt-oss` as default, `llama`, `code-python`)
+- Professional / Social memory profile toggle for GPT‑OSS, mapping to
+  `gpt-oss` (professional) and `gpt-oss-social` (social) aliases while
+  sharing the same model backend
 - Clear branding placeholders so client-specific themes can be applied
 
 ## n8n Integration
@@ -87,8 +90,16 @@ It exposes a HTTP webhook (`/local-agent`) that:
 
 ## Status
 - CLI and web UI both use a shared `Agent` abstraction.
-- Long-term memory is integrated via OpenMemory and can be enabled per alias.
-- GPT‑OSS / Harmony prompt format is supported via the `gpt-oss-harmony` builder.
+- Long-term memory is fully integrated via OpenMemory, with per-alias
+  opt-in and confirmed end-to-end wiring (including API key auth).
+- Memory entries are tagged with `memory_domain` (e.g. professional vs
+  social), `channel` (interactive vs automation), and `session_kind`
+  metadata, and key fields are projected to OpenMemory `tags` for
+  visibility in the dashboard.
+- Web UI exposes GPT‑OSS as the default route with a professional/social
+  profile switch that maps to `gpt-oss` and `gpt-oss-social` aliases.
+- GPT‑OSS / Harmony prompt format is supported via the
+  `gpt-oss-harmony` builder.
 - All existing modules are fully functional and tested independently.
 Each commit represents a clean, working milestone that can be extended safely.
 
