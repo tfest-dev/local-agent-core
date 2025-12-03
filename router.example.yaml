@@ -17,6 +17,10 @@ defaults:
   system_prompt: >
     You are a helpful AI assistant. Use clear, structured responses
     and explain your reasoning when useful.
+  # Memory-related defaults (used by the Agent when a MemoryStore is
+  # configured). Set `memory_enabled` to true per-alias to opt in.
+  memory_enabled: false
+  memory_top_k: 5
 
 aliases:
   general:
@@ -26,6 +30,8 @@ aliases:
     system_prompt: >
       You are a general-purpose assistant. Provide clear, concise,
       and well-structured answers.
+    # Set to true to enable OpenMemory-backed recall for this alias.
+    memory_enabled: true
 
   code-python:
     model: code

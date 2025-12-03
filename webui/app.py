@@ -1,12 +1,14 @@
 # webui/app.py
 
 import logging
+import os
 from pathlib import Path
 
 from flask import Flask, request, jsonify, render_template_string
 from requests.exceptions import RequestException
 
 from agent import Agent
+from memory import OpenMemoryStore
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,8 +18,16 @@ app = Flask(__name__)
 # Default alias for routing
 DEFAULT_ALIAS = "general"
 
-# Shared agent instance for all web requests
-web_agent = Agent(default_alias=DEFAULT_ALIAS, debug=False)
+# Shared agent instance for all web requests. The memory store is configured
+# from the environment; it will only be used for aliases that opt-in via
+# router.yaml.
+_web_memory_store = OpenMemoryStore.from_env()
+web_agent = Agent(
+    default_alias=DEFAULT_ALIAS,
+    debug=True,  # Enable debug logs (including memory) while iterating.
+    memory_store=_web_memory_store,
+    user_id=None,  # Hook here for per-user memory spaces later.
+)
 
 # Simple, self-contained HTML template
 HTML_PAGE = """
@@ -235,6 +245,7 @@ HTML_PAGE = """
             <span>Route alias</span>
             <select id="aliasSelect">
               <option value="general">general</option>
+              <option value="gpt-oss">gpt-oss</option>
               <option value="code-python">code-python</option>
             </select>
           </div>
@@ -372,8 +383,15 @@ def chat():
 
 
 def main():
-    # Run on 0.0.0.0 so it can be accessed from other devices on the LAN if needed.
-    app.run(host="0.0.0.0", port=5001, debug=False)
+    """Start the Flask web UI.
+
+    Host and port can be configured via environment variables:
+    - LAC_WEB_HOST (default: ******* )
+    - LAC_WEB_PORT (default: 5001)
+    """
+    host = os.getenv("LAC_WEB_HOST", "*******")
+    port = int(os.getenv("LAC_WEB_PORT", "5001"))
+    app.run(host=host, port=port, debug=False)
 
 
 if __name__ == "__main__":

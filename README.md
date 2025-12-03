@@ -4,9 +4,24 @@
 
 *A minimal web UI included with the project. Branding, colours and layout are intended to be customised per client.*
 
-
 A lightweight, privacy-focused framework for building small AI agents that run entirely on your own hardware.
 This project is designed to be modular, simple to extend, and suitable for self-hosted or offline environments.
+
+## Dependencies
+- [OpenMemory](https://github.com/CaviraOSS/OpenMemory) provides long‑term memory for AI systems. Self‑hosted. Local‑first. Explainable. Scalable. A full cognitive memory engine — not a vector database.
+
+## Environment configuration
+
+Runtime configuration is provided via environment variables (optionally loaded from a `.env` file using shell tooling):
+
+- `LAC_WEB_HOST` – bind address for the Flask web UI (default: `*******`).
+- `LAC_WEB_PORT` – port for the web UI (default: `5001`).
+- `OPENMEMORY_URL` / `OM_BASE_URL` – base URL for the OpenMemory backend
+  (default: `http://localhost:8080`).
+- `OPENMEMORY_API_KEY` / `OM_API_KEY` – optional API key for authenticated
+  OpenMemory instances.
+
+See `.env.example` for a template and `.env` for a sample local dev setup.
 
 ## Current Components
 
@@ -16,7 +31,7 @@ A clean wrapper around a local or remote LLM HTTP endpoint.
 Supports:
 - synchronous inference
 - streaming responses
-- generic JSON/`/completion` style APIs
+- generic JSON `/completion` style APIs
 
 ### Routing Layer
 Config-driven routing via `router.yaml` / `router.example.yaml`:
@@ -34,6 +49,7 @@ Built-in formats:
 - `phind` – Alpaca/Vicuna-style sections
 - `phi4` – `<|system|>/<|user|>/<|assistant|>` format
 - `plain` – simple system + user concatenation
+- `gpt-oss-harmony` – Harmony prompt format for OpenAI GPT‑OSS models
 
 ### TTS Hook (Optional)
 A simple text-to-speech hook is provided via `tts.speak_text`.
@@ -46,7 +62,7 @@ this function can be swapped or extended to use a concrete TTS engine
 A minimal Flask-based web interface for interacting with the agent:
 
 - Chat-style interface
-- Route alias selection
+- Route alias selection (e.g. `general`, `code-python`, `gpt-oss`)
 - Clear branding placeholders so client-specific themes can be applied
 
 ## n8n Integration
@@ -69,13 +85,18 @@ It exposes a HTTP webhook (`/local-agent`) that:
 
 ---
 
+## Status
+- CLI and web UI both use a shared `Agent` abstraction.
+- Long-term memory is integrated via OpenMemory and can be enabled per alias.
+- GPT‑OSS / Harmony prompt format is supported via the `gpt-oss-harmony` builder.
+- All existing modules are fully functional and tested independently.
+Each commit represents a clean, working milestone that can be extended safely.
+ed via the `gpt-oss-harmony` builder.
+- All existing modules are fully functional and tested independently.
+Each commit represents a clean, working milestone that can be extended safely.
+
 ## Next Planned Modules
-- **Agent loop** + simple tool/action hooks
-- **Local memory integration** (YAML/JSON or SQLite)
+- **Tool/action layer** (e.g. n8n-backed tools and local actions)
 - **Optional background task runner** for scheduled or long-running actions
 
 ---
-
-## Status
-All existing modules are fully functional and tested independently.
-Each commit represents a clean, working milestone that can be extended safely.

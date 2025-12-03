@@ -6,6 +6,7 @@ import sys
 from requests.exceptions import RequestException
 
 from agent import Agent
+from memory import OpenMemoryStore
 from tts import speak_text
 
 
@@ -41,7 +42,15 @@ def main() -> None:
         print("[!] No text prompt provided.")
         sys.exit(1)
 
-    agent = Agent(default_alias=args.alias, debug=True)
+    # Initialise OpenMemory-backed store from environment if available. The
+    # agent will only use it for aliases that enable memory in router.yaml.
+    memory_store = OpenMemoryStore.from_env()
+    agent = Agent(
+        default_alias=args.alias,
+        debug=True,
+        memory_store=memory_store,
+        user_id=None,  # Can be extended later for per-user spaces.
+    )
 
     try:
         result = agent.respond(args.text, alias=args.alias)
