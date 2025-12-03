@@ -49,6 +49,15 @@ A minimal Flask-based web interface for interacting with the agent:
 - Route alias selection
 - Clear branding placeholders so client-specific themes can be applied
 
+## n8n Integration
+
+An example n8n workflow is included under `examples/n8n/local-agent-webhook.json`.
+
+It exposes a HTTP webhook (`/local-agent`) that:
+- accepts `{"text": "..."}` as input
+- forwards the request to the local `/chat` endpoint
+- returns the LLM response as either text or JSON
+
 ---
 
 ## Goals of the Project

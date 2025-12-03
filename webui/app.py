@@ -6,8 +6,7 @@ from pathlib import Path
 from flask import Flask, request, jsonify, render_template_string
 from requests.exceptions import RequestException
 
-from inference import LLMRunner, route
-from prompts import build_prompt
+from agent import Agent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,6 +15,9 @@ app = Flask(__name__)
 
 # Default alias for routing
 DEFAULT_ALIAS = "general"
+
+# Shared agent instance for all web requests
+web_agent = Agent(default_alias=DEFAULT_ALIAS, debug=False)
 
 # Simple, self-contained HTML template
 HTML_PAGE = """
@@ -347,21 +349,20 @@ def chat():
         return jsonify({"ok": False, "error": "Empty input."}), 400
 
     try:
-        routing = route(alias)
+        response_text = web_agent.respond(user_input, alias=alias)
+    except ValueError:
+        # Should already be caught by the empty-input check, but keep this
+        # defensive branch to avoid leaking internal errors.
+        return jsonify({"ok": False, "error": "Empty input."}), 400
     except Exception as e:
-        logger.exception("Routing error")
+        # Preserve existing behaviour: distinguish between routing errors and
+        # connectivity issues where possible.
+        if isinstance(e, RequestException):
+            logger.exception("LLM request failed")
+            return jsonify({"ok": False, "error": "Model endpoint not reachable."}), 502
+
+        logger.exception("Routing or agent error")
         return jsonify({"ok": False, "error": f"Unknown alias '{alias}'"}), 400
-
-    model_url = routing["model_url"]
-    llm = LLMRunner(model_url=model_url)
-
-    prompt = build_prompt(alias, user_input)
-
-    try:
-        response_text = llm.run_chat(prompt)
-    except RequestException as e:
-        logger.exception("LLM request failed")
-        return jsonify({"ok": False, "error": "Model endpoint not reachable."}), 502
 
     response_text = (response_text or "").strip()
     if not response_text:

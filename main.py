@@ -5,8 +5,7 @@ import sys
 
 from requests.exceptions import RequestException
 
-from inference import LLMRunner, route
-from prompts import build_prompt
+from agent import Agent
 from tts import speak_text
 
 
@@ -42,20 +41,10 @@ def main() -> None:
         print("[!] No text prompt provided.")
         sys.exit(1)
 
-    routing = route(args.alias)
-    model_url = routing["model_url"]
+    agent = Agent(default_alias=args.alias, debug=True)
 
-    print(f"[~] Using alias: {args.alias}")
-    print(f"[~] Model URL: {model_url}")
-
-    llm_runner = LLMRunner(model_url=model_url)
-
-    print("[~] Building prompt…")
-    prompt = build_prompt(args.alias, args.text)
-
-    print("[~] Running LLM inference…")
     try:
-        result = llm_runner.run_chat(prompt)
+        result = agent.respond(args.text, alias=args.alias)
     except RequestException as e:
         print(f"[x] Failed to reach model endpoint: {e}")
         sys.exit(1)
