@@ -1,11 +1,55 @@
 # agent/core.py
 
 from collections import deque
+from dataclasses import dataclass
 from typing import Deque, Dict, Optional, List, Tuple
 
 from inference import LLMRunner, route, get_router_alias_config
 from prompts import build_prompt
 from memory import MemoryStore, MemoryItem
+
+
+@dataclass
+class InterpreterResult:
+    """Structured view of the interpreter/planner output.
+
+    Parsed from the first LLM pass in orchestrator mode so that downstream
+    code (tools, policies) can use a stable structure instead of
+    re-interpreting free-form text.
+    """
+
+    intent: str = ""
+    category: str = ""
+    needs_tools: bool = False
+    tools_hint: str = ""
+    thread: str = ""  # "new" or "continuation" when available
+    summary: str = ""
+    raw_text: str = ""  # original interpreter text for debugging
+
+
+@dataclass
+class ToolPlan:
+    """Lightweight skeleton for future tool/executor integration.
+
+    Currently derived from the interpreter classification only; no tools
+    are executed yet.
+    """
+
+    needs_tools: bool = False
+    categories: List[str] = None
+    reason: str = ""  # short note from interpreter / planner
+
+
+@dataclass
+class TurnState:
+    """State container shared across orchestrator phases for a single turn."""
+
+    text: str
+    alias_name: str
+    memory_context: Optional[str]
+    interpreter_raw: str = ""
+    interpreter: Optional[InterpreterResult] = None
+    tool_plan: Optional[ToolPlan] = None
 
 
 class Agent:
@@ -44,9 +88,10 @@ class Agent:
     def respond(self, user_input: str, alias: Optional[str] = None, *, channel: str = "interactive") -> str:
         """Run a single turn through the agent and return the model response.
 
-        This method intentionally stays close to the existing behaviour of the
-        CLI and web UI: it resolves the route, builds a prompt, and calls the
-        configured LLM endpoint once.
+        For simple aliases, this is a single LLM call. When an alias is marked
+        as `orchestrator` in the router config, this instead runs a small
+        multi-role pipeline (Interpreter/Planner + Narrator) using the same
+        underlying model endpoint.
         """
         text = (user_input or "").strip()
         if not text:
@@ -62,6 +107,7 @@ class Agent:
         memory_top_k = int(cfg.get("memory_top_k", self.memory_top_k_default))
         memory_domain_cfg = cfg.get("memory_domain")
         effective_domain = str(memory_domain_cfg or self.memory_domain)
+        orchestrator_enabled = bool(cfg.get("orchestrator", False))
 
         # Lightweight continuity tagging: track the last few user inputs per
         # (user_id, alias) key so we can distinguish new queries from
@@ -101,19 +147,30 @@ class Agent:
             print("[~] Building prompt…")
 
         llm_runner = LLMRunner(model_url=model_url)
-        prompt = build_prompt(alias_name, text, memory_context=memory_context)
 
-        if self.debug:
-            print("[~] Running LLM inference…")
+        # Orchestrated multi-role pipeline: Interpreter/Planner + Narrator.
+        if orchestrator_enabled:
+            result = self._respond_orchestrated(
+                text=text,
+                alias_name=alias_name,
+                llm_runner=llm_runner,
+                cfg=cfg,
+                memory_context=memory_context,
+            )
+        else:
+            prompt = build_prompt(alias_name, text, memory_context=memory_context)
 
-        result = llm_runner.run_chat(prompt)
+            if self.debug:
+                print("[~] Running LLM inference…")
 
-        # For GPT-OSS / Harmony-formatted responses, strip analysis/channel
-        # scaffolding and return only the `final` channel content.
-        if cfg.get("format") == "gpt-oss-harmony":
-            cleaned = self._extract_gpt_oss_final(result)
-            if cleaned:
-                result = cleaned
+            result = llm_runner.run_chat(prompt)
+
+            # For GPT-OSS / Harmony-formatted responses, strip analysis/channel
+            # scaffolding and return only the `final` channel content.
+            if cfg.get("format") == "gpt-oss-harmony":
+                cleaned = self._extract_gpt_oss_final(result)
+                if cleaned:
+                    result = cleaned
 
         if memory_enabled and self.memory_store is not None:
             try:
@@ -193,3 +250,190 @@ class Agent:
                 break
 
         return content.strip() or None
+
+    # ------------------------------------------------------------------
+    # Orchestrator helpers
+    # ------------------------------------------------------------------
+
+    def _parse_interpreter_output(self, text: str) -> InterpreterResult:
+        """Parse labelled interpreter output into an InterpreterResult.
+
+        Expected format (all labels optional but recommended):
+
+            Intent: ...
+            Category: ...
+            Needs_tools: yes/no ...
+            Thread: new/continuation
+            Summary: ...
+        """
+        result = InterpreterResult(raw_text=(text or "").strip())
+        if not text:
+            return result
+
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or ":" not in line:
+                continue
+            label, value = line.split(":", 1)
+            label = label.strip().lower()
+            value = value.strip()
+
+            if label == "intent":
+                result.intent = value
+            elif label == "category":
+                result.category = value
+            elif label == "needs_tools":
+                lowered = value.lower()
+                result.needs_tools = lowered.startswith("y") or "true" in lowered
+                # keep any free-form hint about which tools in tools_hint
+                result.tools_hint = value
+            elif label == "thread":
+                result.thread = value
+            elif label == "summary":
+                result.summary = value
+
+        return result
+
+    def _derive_tool_plan(self, interp: InterpreterResult) -> ToolPlan:
+        """Derive a minimal ToolPlan from interpreter classification.
+
+        This does not execute tools; it just records intent so that a
+        future executor layer can act on it.
+        """
+        plan = ToolPlan(needs_tools=interp.needs_tools, categories=[], reason=interp.summary)
+
+        hint = (interp.tools_hint or "").lower()
+        cats: List[str] = []
+        if any(w in hint for w in ("email", "smtp", "sendgrid", "ses")):
+            cats.append("email")
+        if any(w in hint for w in ("workflow", "airflow", "prefect", "dag")):
+            cats.append("workflow")
+        if any(w in hint for w in ("file", "filesystem", "disk")):
+            cats.append("filesystem")
+        if any(w in hint for w in ("http", "api", "request", "webhook")):
+            cats.append("http")
+
+        plan.categories = cats
+        return plan
+
+    def _respond_orchestrated(
+        self,
+        *,
+        text: str,
+        alias_name: str,
+        llm_runner: LLMRunner,
+        cfg: dict,
+        memory_context: Optional[str],
+    ) -> str:
+        """Multi-role pipeline using a single model endpoint.
+
+        Phase 1: Interpreter/Planner – classify the request and produce a
+        compact analysis.
+        Phase 2: Narrator – turn that analysis + context into the final
+        user-facing answer.
+
+        Tools are not yet invoked here; this is purely reasoning + narration.
+        """
+        # --- Phase 1: Interpreter / Planner ---
+        interpreter_instructions = (
+            "You are the interpreter and planner for this agent. Given the user's "
+            "latest input and any relevant past context, produce a SHORT, "
+            "readable classification using the following exact fields:\n\n"
+            "Intent: <one-line description of what the user wants>\n"
+            "Category: <high-level area, e.g. planning / coding / research / ops>\n"
+            "Needs_tools: <yes/no and which kinds if yes>\n"
+            "Thread: <new/continuation>\n"
+            "Summary: <2-3 short sentences with key details for execution>\n\n"
+            "Write plain text with these labels exactly, no JSON, no bullet "
+            "lists, no markdown headings."
+        )
+
+        # Shared state object for this turn across phases.
+        state = TurnState(
+            text=text,
+            alias_name=alias_name,
+            memory_context=memory_context,
+        )
+
+        if memory_context:
+            interp_user = (
+                f"{interpreter_instructions}\n\n"
+                "--- RELEVANT PAST CONTEXT ---\n"
+                f"{memory_context}\n\n"
+                "--- CURRENT USER INPUT ---\n"
+                f"{text}"
+            )
+        else:
+            interp_user = (
+                f"{interpreter_instructions}\n\n"
+                "--- CURRENT USER INPUT ---\n"
+                f"{text}"
+            )
+
+        # We pass `memory_context=None` here because it has already been
+        # embedded into the interpreter input where relevant.
+        interp_prompt = build_prompt(alias_name, interp_user, memory_context=None)
+
+        if self.debug:
+            print("[orchestrator] Running Interpreter/Planner phase…")
+
+        interp_raw = llm_runner.run_chat(interp_prompt)
+        if cfg.get("format") == "gpt-oss-harmony":
+            cleaned = self._extract_gpt_oss_final(interp_raw)
+            if cleaned:
+                interp_raw = cleaned
+
+        state.interpreter_raw = (interp_raw or "").strip()
+        state.interpreter = self._parse_interpreter_output(state.interpreter_raw)
+        state.tool_plan = self._derive_tool_plan(state.interpreter)
+
+        if self.debug:
+            print("[orchestrator] Interpreter classification:\n" + str(state.interpreter_raw))
+            if state.tool_plan and state.tool_plan.needs_tools:
+                print("[orchestrator] Tool plan (skeleton, not executed): ", state.tool_plan)
+
+        # --- Phase 2: Narrator ---
+        narrator_instructions = (
+            "You are the narrator for this agent. Your job is to turn the "
+            "interpreter's internal analysis into a clear, concise response for "
+            "the user. Use the analysis only as internal guidance.\n\n"
+            "You are given:\n"
+            "- The latest user input.\n"
+            "- Any relevant past context.\n"
+            "- The interpreter's analysis.\n\n"
+            "Write the final answer to the user. Do NOT include the "
+            "interpreter analysis itself; only return the answer the user "
+            "should see."
+        )
+
+        if memory_context:
+            narr_user = (
+                f"{narrator_instructions}\n\n"
+                "--- RELEVANT PAST CONTEXT ---\n"
+                f"{memory_context}\n\n"
+                "--- USER INPUT ---\n"
+                f"{text}\n\n"
+                "--- INTERPRETER ANALYSIS (INTERNAL) ---\n"
+                f"{interp_raw}"
+            )
+        else:
+            narr_user = (
+                f"{narrator_instructions}\n\n"
+                "--- USER INPUT ---\n"
+                f"{text}\n\n"
+                "--- INTERPRETER ANALYSIS (INTERNAL) ---\n"
+                f"{interp_raw}"
+            )
+
+        narr_prompt = build_prompt(alias_name, narr_user, memory_context=None)
+
+        if self.debug:
+            print("[orchestrator] Running Narrator phase…")
+
+        narr_raw = llm_runner.run_chat(narr_prompt)
+        if cfg.get("format") == "gpt-oss-harmony":
+            cleaned = self._extract_gpt_oss_final(narr_raw)
+            if cleaned:
+                narr_raw = cleaned
+
+        return (narr_raw or "").strip()

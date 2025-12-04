@@ -46,6 +46,7 @@ aliases:
       instructions provided and be concise.
     memory_enabled: true
     memory_domain: professional
+    orchestrator: true
 
   gpt-oss-social:
     model: general
@@ -56,6 +57,7 @@ aliases:
       while still being helpful and concise.
     memory_enabled: true
     memory_domain: social
+    orchestrator: true
 
   code-python:
     model: code
