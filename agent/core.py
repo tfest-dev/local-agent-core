@@ -7,6 +7,7 @@ from typing import Deque, Dict, Optional, List, Tuple
 from inference import LLMRunner, route, get_router_alias_config
 from prompts import build_prompt
 from memory import MemoryStore, MemoryItem
+from tools import ToolExecutor
 
 
 @dataclass
@@ -156,6 +157,7 @@ class Agent:
                 llm_runner=llm_runner,
                 cfg=cfg,
                 memory_context=memory_context,
+                channel=channel,
             )
         else:
             prompt = build_prompt(alias_name, text, memory_context=memory_context)
@@ -304,7 +306,7 @@ class Agent:
 
         hint = (interp.tools_hint or "").lower()
         cats: List[str] = []
-        if any(w in hint for w in ("email", "smtp", "sendgrid", "ses")):
+        if any(w in hint for w in ("email", "smtp", "sendgrid", "ses", "mail")):
             cats.append("email")
         if any(w in hint for w in ("workflow", "airflow", "prefect", "dag")):
             cats.append("workflow")
@@ -312,6 +314,8 @@ class Agent:
             cats.append("filesystem")
         if any(w in hint for w in ("http", "api", "request", "webhook")):
             cats.append("http")
+        if any(w in hint for w in ("note", "notes", "obsidian", "journal")):
+            cats.append("notes")
 
         plan.categories = cats
         return plan
@@ -324,6 +328,7 @@ class Agent:
         llm_runner: LLMRunner,
         cfg: dict,
         memory_context: Optional[str],
+        channel: str,
     ) -> str:
         """Multi-role pipeline using a single model endpoint.
 
@@ -387,10 +392,23 @@ class Agent:
         state.interpreter = self._parse_interpreter_output(state.interpreter_raw)
         state.tool_plan = self._derive_tool_plan(state.interpreter)
 
+        executor = ToolExecutor()
+        interactive_allowed = cfg.get("interactive_tool_categories") or []
+        tool_results = executor.execute(
+            state.tool_plan,
+            state,
+            channel=channel,
+            interactive_allowed=interactive_allowed,
+        )
+
         if self.debug:
             print("[orchestrator] Interpreter classification:\n" + str(state.interpreter_raw))
             if state.tool_plan and state.tool_plan.needs_tools:
-                print("[orchestrator] Tool plan (skeleton, not executed): ", state.tool_plan)
+                print("[orchestrator] Tool plan (skeleton): ", state.tool_plan)
+            if tool_results:
+                print("[orchestrator] Tool results (may be planning-only):")
+                for res in tool_results:
+                    print("  -", res)
 
         # --- Phase 2: Narrator ---
         narrator_instructions = (
@@ -406,6 +424,26 @@ class Agent:
             "should see."
         )
 
+        # Include tool plan / results as internal guidance for the narrator
+        # without changing user-facing behaviour.
+        tool_info_lines: List[str] = []
+        if state.tool_plan and state.tool_plan.needs_tools:
+            cats = ", ".join(state.tool_plan.categories or [])
+            tool_info_lines.append("--- TOOL PLAN (INTERNAL) ---")
+            tool_info_lines.append(f"Needs_tools: yes")
+            if cats:
+                tool_info_lines.append(f"Categories: {cats}")
+            if state.tool_plan.reason:
+                tool_info_lines.append(f"Reason: {state.tool_plan.reason}")
+        if tool_results:
+            tool_info_lines.append("--- TOOL RESULTS (INTERNAL) ---")
+            for r in tool_results:
+                tool_info_lines.append(f"{r.tool_name}: {r.summary}")
+
+        tool_block = ""
+        if tool_info_lines:
+            tool_block = "\n" + "\n".join(tool_info_lines)
+
         if memory_context:
             narr_user = (
                 f"{narrator_instructions}\n\n"
@@ -414,7 +452,7 @@ class Agent:
                 "--- USER INPUT ---\n"
                 f"{text}\n\n"
                 "--- INTERPRETER ANALYSIS (INTERNAL) ---\n"
-                f"{interp_raw}"
+                f"{interp_raw}" + tool_block
             )
         else:
             narr_user = (
@@ -422,7 +460,7 @@ class Agent:
                 "--- USER INPUT ---\n"
                 f"{text}\n\n"
                 "--- INTERPRETER ANALYSIS (INTERNAL) ---\n"
-                f"{interp_raw}"
+                f"{interp_raw}" + tool_block
             )
 
         narr_prompt = build_prompt(alias_name, narr_user, memory_context=None)

@@ -47,8 +47,16 @@ aliases:
     memory_enabled: true
     memory_domain: professional
     orchestrator: true
+    # Categories of tools that are allowed to run even for interactive
+    # channels (e.g. writing notes to Obsidian, composing draft emails).
+    interactive_tool_categories:
+      - notes
+      - email
 
   gpt-oss-social:
+  # Uses the same underlying GPT-OSS model, but tagged as a social/companion
+  # profile for memory so OpenMemory can distinguish it from professional
+  # interactions while sharing the same backend.
     model: general
     stream: false
     format: gpt-oss-harmony
